@@ -58,6 +58,7 @@ def clean_lyrics(lyrics:str):
     r'--+',  # Long dashes or similar
     r'^\s*$',  # Empty lines or lines containing only spaces
     r"^\d+\s*Contributor.*?Lyrics", # n ContributorsSongName Lyrics
+    r'embed',
     ]
 
     for pattern in unwanted_patterns:
@@ -86,6 +87,8 @@ def clean_and_standardize(lyrics:str):
 
 
 df.columns = ['artist', 'title','raw_lyrics']
+df = df[df['artist'] != 'KK']
+df = df[df['title'] != 'Memu Aagamu']
 df['cleaned_lyrics'] = np.vectorize(clean_and_standardize)(df['raw_lyrics'])
 
 df = df[df['cleaned_lyrics'].str.len() >= 10]
@@ -95,6 +98,7 @@ df['cleaned_lyrics'] = df['cleaned_lyrics'].str.replace('ன', 'n')
 
 stop_words = set(stopwords.words('hinglish'))
 df['cleaned_lyrics'] = df['cleaned_lyrics'].apply(lambda x: ' '.join([word for word in x.split() if word not in stop_words]))
+df = df[df['cleaned_lyrics'] != "song instrumental"]
 df.drop('raw_lyrics',inplace=True,axis=1)
 
 df.to_csv("data/lyrics_cleaned.csv",index=False)

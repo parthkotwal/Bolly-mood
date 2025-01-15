@@ -1,9 +1,10 @@
 from dotenv import load_dotenv
 import os
 from pathlib import Path
-env_path = Path(__file__).resolve().parent.parent / '.env'
+env_path = Path(__file__).resolve().parent / '.env'
 load_dotenv(dotenv_path=env_path)
 genius_token = os.getenv("GENIUS_ACCESS_TOKEN")
+# print(genius_token)
 
 import lyricsgenius
 import time
@@ -17,6 +18,7 @@ genius.excluded_terms = ["(Live)", "(Remix)"]
 
 # Load artist names and existing dataset
 artists = list(pd.read_csv("data/artistnames.csv")['Name'])
+# artists = ['KK (IND)']
 existing_data_file = "data/lyrics.csv"
 try:
     existing_data = pd.read_csv(existing_data_file, encoding="utf-8")
