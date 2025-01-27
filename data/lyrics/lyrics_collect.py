@@ -18,7 +18,7 @@ genius.excluded_terms = ["(Live)", "(Remix)"]
 
 # Load artist names and existing dataset
 artists = list(pd.read_csv("data/artistnames.csv")['Name'])
-# artists = ['KK (IND)']
+# artists = ['Rahat Fateh Ali Khan']
 existing_data_file = "data/lyrics.csv"
 try:
     existing_data = pd.read_csv(existing_data_file, encoding="utf-8")
