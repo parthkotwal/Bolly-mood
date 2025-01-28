@@ -19,7 +19,7 @@ def detect_script(lyrics:str):
 
     bengali_pattern = r'[\u0980-\u09FF]'
     bengali_count = len(re.findall(bengali_pattern, lyrics))
-    
+
     if devanagari_count > 0:
         return 'devanagari'
     elif gurmukhi_count > 0:
