@@ -139,4 +139,14 @@ def clean_and_translate(lyrics:str, artist:str, max_iter:int=5):
     return lyrics
 
 df = pd.read_csv('data/lyrics/lyrics.csv')
-print(clean_and_translate("This is a test गीत with mixed scripts.",'Aastha Gill'))
+print(clean_and_translate("""गिन गिन गिन गिन मर गयी
+You might also likeMiss करती रहती तुझको
+पर तू मेरा Phone ना पकड़े
+I'm the queen of the jungle
+फिर मुझसे ज़्यादा तेरे नखरे
+मिस करती रहती तुझको
+पर तू मेरा फोन ना पकड़े
+I'm the queen of the jungle
+फिर मुझसे ज़्यादा तेरे नखरे
+इतना भी तू भाव ना खा
+ओ उड़ते मुसाफिर floor पे आ""",'Aastha Gill'))
