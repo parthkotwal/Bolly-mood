@@ -1,10 +1,11 @@
-import pandas as pd
-import numpy as np
-import re
 from nltk.corpus import stopwords
 from dotenv import load_dotenv
 from google.cloud import translate_v3
 from pathlib import Path
+from indic_transliteration.sanscript import transliterate, DEVANAGARI, ITRANS
+import pandas as pd
+import numpy as np
+import re
 import os
 
 env_path = Path(__file__).resolve().parent / ".env"
@@ -19,68 +20,6 @@ client = translate_v3.TranslationServiceClient.from_service_account_file(GCP_CRE
 df = pd.read_csv('data/lyrics/lyrics.csv')
 df.columns = ['artist', 'title','raw_lyrics']
 
-def detect_script(lyrics:str) -> str:
-    devanagari_pattern = r'[\u0900-\u097F]'
-    gurmukhi_pattern = r'[\u0A00-\u0A7F]'
-    tamil_pattern = r'[\u0B80-\u0BFF]'
-    bengali_pattern = r'[\u0980-\u09FF]'
-    
-    if re.search(devanagari_pattern, lyrics):
-        return 'devanagari'
-    elif re.search(gurmukhi_pattern, lyrics):
-        return 'gurmukhi'
-    elif re.search(tamil_pattern, lyrics):
-        return 'tamil'
-    elif re.search(bengali_pattern, lyrics):
-        return 'bengali'
-    else:
-        return 'roman'
-    
-# def detect_and_translate_mixed_script(lyrics: str) -> str:
-#     english_words = re.findall(r'[a-zA-Z][a-zA-Z\'’]*', lyrics)
-    
-#     if not english_words:
-#         return lyrics
-    
-#     translations = {}
-#     for word in english_words:
-#         try:
-#             response = client.translate_text(
-#             contents=[word, target_language_code="hi"
-#             )["translatedText"]
-#             translations[word] = translated_text
-
-#     try:
-#         response = client.translate_text(
-#             contents=[lyrics],
-#             target_language_code="hi",
-#             parent=PARENT,
-#             mime_type="text/plain"
-#         )
-#         return response.translations[0].translated_text
-#     except Exception as e:
-#         print(f"Translation error: {e}")
-#         return lyrics
-    
-#     # Replace English words with their translations
-#     for word, translated in translations.items():
-#         lyrics = re.sub(rf'\b{re.escape(word)}\b', translated, lyrics)
-    
-#     return lyrics
-    
-def translate_to_hindi(lyrics:str):
-    try:
-        response = client.translate_text(
-            contents=[lyrics],
-            target_language_code="hi",
-            parent=PARENT,
-            mime_type="text/plain"
-        )
-        return response.translations[0].translated_text
-    except Exception as e:
-        print(f"Translation error: {e}")
-        return lyrics
-    
 def clean_lyrics(lyrics: str, artist: str):
     # Convert lyrics to lowercase for consistent matching
     lyrics = lyrics.lower()
@@ -99,6 +38,7 @@ def clean_lyrics(lyrics: str, artist: str):
         r'^\s*$',  # Empty lines
         r"^\d+\s*contributor.*?lyrics",  # Contributor section
         r'embed',
+        r"\(|\)",
         r'you might also like',
         rf'see\s+{artist_first_name.lower()}\s*{artist_last_name.lower()}\s*liveget\s*tickets\s*as\s*low\s*as\s*\d+\s*you\s*might\s*also\s*like',
         rf'see\s+{artist_first_name.lower()}\s*liveget\s*tickets\s*as\s*low\s*as\s*\+\s*you\s*might\s*also\s*like',
@@ -116,20 +56,91 @@ def clean_lyrics(lyrics: str, artist: str):
 
     return lyrics
 
-def clean_and_standardize(lyrics: str, artist: str):
-    lyrics = clean_lyrics(lyrics, artist)
-    lyrics = translate_to_hindi(lyrics)
-    return lyrics
+def translate(lyrics: str, artist: str):
+    language_scripts = {
+        "as": r"[\u0980-\u09FF]+",  # Assamese
+        "bn": r"[\u0980-\u09FF]+",  # Bengali
+        "en": r"[a-zA-Z'’]+",       # English
+        "gu": r"[\u0A80-\u0AFF]+",  # Gujarati
+        "hi": r"[\u0900-\u097F]+",  # Hindi
+        "kn": r"[\u0C80-\u0CFF]+",  # Kannada
+        "ks": r"[\u0600-\u06FF]+",  # Kashmiri (Perso-Arabic script)
+        "ml": r"[\u0D00-\u0D7F]+",  # Malayalam
+        "mr": r"[\u0900-\u097F]+",  # Marathi
+        "ne": r"[\u0900-\u097F]+",  # Nepali
+        "or": r"[\u0B00-\u0B7F]+",  # Oriya (Odia)
+        "pa": r"[\u0A00-\u0A7F]+",  # Punjabi
+        "sa": r"[\u0900-\u097F]+",  # Sanskrit (Devanagari script)
+        "sd": r"[\u0600-\u06FF]+",  # Sindhi (Arabic script)
+        "ta": r"[\u0B80-\u0BFF]+",  # Tamil
+        "te": r"[\u0C00-\u0C7F]+",  # Telugu
+        "ur": r"[\u0600-\u06FF]+",  # Urdu (Perso-Arabic script)
+    }
 
-row_index = 2
-specific_entry = df.iloc[row_index]
+    # Remove all unnecessary characters and text from scraping
+    lyrics = clean_lyrics(lyrics=lyrics, artist=artist)
+
+    # Collect words from all detected languages
+    words_to_translate = set()
+    for lang, pattern in language_scripts.items():
+        words_to_translate.update(re.findall(pattern, lyrics))
+
+    # Include English and Romanized words
+    words_to_translate.update(re.findall(r"[a-zA-Z'’]+", lyrics))
+
+    # Convert set to list for batch API translation
+    words_to_translate = list(words_to_translate)
+    
+    # Dictionary to store translations
+    translations = {}
+
+    if words_to_translate:
+        try:
+            response = client.translate_text(
+                contents=words_to_translate,
+                target_language_code="hi",
+                parent=PARENT,
+                mime_type="text/plain"
+            )
+            # Map original words to their translated versions
+            for original, translated in zip(words_to_translate, response.translations):
+                translations[original] = translated.translated_text
+        except Exception as e:
+            print(f"Translation error: {e}")
+
+    # Replace words in lyrics with Hindi translations
+    for word, translated in translations.items():
+        lyrics = re.sub(rf'\b{re.escape(word)}\b', translated, lyrics)
+
+    lyrics = lyrics.replace("'","")
+
+    # Transliterate remaining words until there are none
+    previous_lyrics = ""
+    max_iterations = 10
+    iteration = 0
+
+    while lyrics != previous_lyrics and iteration < max_iterations:
+        previous_lyrics = lyrics
+        remaining_romanized = re.findall(r"[a-zA-Z'’]+", lyrics)
+        if not remaining_romanized:
+            break
+
+        for word in remaining_romanized:
+            transliterated_word = transliterate(word, ITRANS, DEVANAGARI)
+            lyrics = re.sub(rf'\b{re.escape(word)}\b', transliterated_word, lyrics)
+
+        iteration += 1
+
+    return lyrics
+   
+# def clean_and_translate(lyrics: str, artist: str):
+#     lyrics = clean_lyrics(lyrics, artist)
+#     lyrics = translate(lyrics, artist)
+#     return lyrics
+
+specific_entry = df.iloc[393]
 lyrics = specific_entry['raw_lyrics']
 artist = specific_entry['artist']
 
-english_words = re.findall(r"[a-zA-Z'’]+(?: [a-zA-Z'’]+)*", clean_lyrics(lyrics, artist))
-try:
-    english_words.remove("'")
-except ValueError as v:
-    english_words
-    
-print('phone')
+print(f"Original: {lyrics}")
+print(f"Translated: {translate(lyrics, artist)}")
