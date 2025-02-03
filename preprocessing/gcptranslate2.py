@@ -39,7 +39,13 @@ def clean_lyrics(lyrics: str, artist: str):
         r"^\d+\s*contributor.*?lyrics",  # Contributor section
         r'embed',
         r"\(|\)",
+        r"1",
         r'you might also like',
+        r'\*',
+        r"\$'?[\d,]+'?",
+        r"(?<!\.)\.(?!\.)",
+        r'(?<!।)।(?!।)',
+        rf'see\s+{artist_first_name.lower()}\s*{artist_last_name.lower()}\s*liveget\s*tickets\s*as\s*low\s*as',
         rf'see\s+{artist_first_name.lower()}\s*{artist_last_name.lower()}\s*liveget\s*tickets\s*as\s*low\s*as\s*\d+\s*you\s*might\s*also\s*like',
         rf'see\s+{artist_first_name.lower()}\s*liveget\s*tickets\s*as\s*low\s*as\s*\+\s*you\s*might\s*also\s*like',
         rf'see\s+{artist_last_name.lower()}\s*liveget\s*tickets\s*as\s*low\s*as\s*\d+\s*you\s*might\s*also\s*like',
@@ -58,27 +64,27 @@ def clean_lyrics(lyrics: str, artist: str):
 
 def translate(lyrics: str, artist: str):
     language_scripts = {
-        "as": r"[\u0980-\u09FF]+",  # Assamese
-        "bn": r"[\u0980-\u09FF]+",  # Bengali
-        "en": r"[a-zA-Z'’]+",       # English
-        "gu": r"[\u0A80-\u0AFF]+",  # Gujarati
-        "hi": r"[\u0900-\u097F]+",  # Hindi
-        "kn": r"[\u0C80-\u0CFF]+",  # Kannada
-        "ks": r"[\u0600-\u06FF]+",  # Kashmiri (Perso-Arabic script)
-        "ml": r"[\u0D00-\u0D7F]+",  # Malayalam
-        "mr": r"[\u0900-\u097F]+",  # Marathi
-        "ne": r"[\u0900-\u097F]+",  # Nepali
-        "or": r"[\u0B00-\u0B7F]+",  # Oriya (Odia)
-        "pa": r"[\u0A00-\u0A7F]+",  # Punjabi
-        "sa": r"[\u0900-\u097F]+",  # Sanskrit (Devanagari script)
-        "sd": r"[\u0600-\u06FF]+",  # Sindhi (Arabic script)
-        "ta": r"[\u0B80-\u0BFF]+",  # Tamil
-        "te": r"[\u0C00-\u0C7F]+",  # Telugu
-        "ur": r"[\u0600-\u06FF]+",  # Urdu (Perso-Arabic script)
+        "as": r"[\u0980-\u09FF]+(?: [\u0980-\u09FF]+)*",  # Assamese
+        "bn": r"[\u0980-\u09FF]+(?: [\u0980-\u09FF]+)*",  # Bengali
+        "gu": r"[\u0A80-\u0AFF]+(?: [\u0A80-\u0AFF]+)*",  # Gujarati
+        "hi": r"[\u0900-\u097F]+(?: [\u0900-\u097F]+)*",  # Hindi
+        "kn": r"[\u0C80-\u0CFF]+(?: [\u0C80-\u0CFF]+)*",  # Kannada
+        "ks": r"[\u0600-\u06FF]+(?: [\u0600-\u06FF]+)*",  # Kashmiri (Perso-Arabic script)
+        "ml": r"[\u0D00-\u0D7F]+(?: [\u0D00-\u0D7F]+)*",  # Malayalam
+        "mr": r"[\u0900-\u097F]+(?: [\u0900-\u097F]+)*",  # Marathi
+        "ne": r"[\u0900-\u097F]+(?: [\u0900-\u097F]+)*",  # Nepali
+        "or": r"[\u0B00-\u0B7F]+(?: [\u0B00-\u0B7F]+)*",  # Oriya (Odia)
+        "pa": r"[\u0A00-\u0A7F]+(?: [\u0A00-\u0A7F]+)*",  # Punjabi
+        "sa": r"[\u0900-\u097F]+(?: [\u0900-\u097F]+)*",  # Sanskrit (Devanagari script)
+        "sd": r"[\u0600-\u06FF]+(?: [\u0600-\u06FF]+)*",  # Sindhi (Arabic script)
+        "ta": r"[\u0B80-\u0BFF]+(?: [\u0B80-\u0BFF]+)*",  # Tamil
+        "te": r"[\u0C00-\u0C7F]+(?: [\u0C00-\u0C7F]+)*",  # Telugu
+        "ur": r"[\u0600-\u06FF]+(?: [\u0600-\u06FF]+)*",  # Urdu (Perso-Arabic script)
     }
 
+
     # Remove all unnecessary characters and text from scraping
-    lyrics = clean_lyrics(lyrics=lyrics, artist=artist)
+    lyrics = clean_lyrics(lyrics, artist)
 
     # Collect words from all detected languages
     words_to_translate = set()
@@ -90,7 +96,7 @@ def translate(lyrics: str, artist: str):
 
     # Convert set to list for batch API translation
     words_to_translate = list(words_to_translate)
-    
+
     # Dictionary to store translations
     translations = {}
 
@@ -132,15 +138,10 @@ def translate(lyrics: str, artist: str):
         iteration += 1
 
     return lyrics
-   
-# def clean_and_translate(lyrics: str, artist: str):
-#     lyrics = clean_lyrics(lyrics, artist)
-#     lyrics = translate(lyrics, artist)
-#     return lyrics
 
-specific_entry = df.iloc[393]
+specific_entry = df.iloc[223]
 lyrics = specific_entry['raw_lyrics']
 artist = specific_entry['artist']
 
-print(f"Original: {lyrics}")
-print(f"Translated: {translate(lyrics, artist)}")
+print(f"Original {specific_entry['title']}: {specific_entry}")
+print(f"Translated {specific_entry['title']}: {clean_lyrics(lyrics, artist)}")
