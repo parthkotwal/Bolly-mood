@@ -89,7 +89,8 @@ def detect_script(lyrics:str) -> str:
         "kn": (0x0C80, 0x0CFF),  # Kannada
         "ml": (0x0D00, 0x0D7F),  # Malayalam
         "or": (0x0B00, 0x0B7F),  # Oriya
-        "en": (0x0020, 0x007E)   # English
+        "en": (0x0020, 0x007E),  # English
+        "ar": (0x0600, 0x06FF),  # Arabic/Urdu
     }
     
     char_counts = {script: 0 for script in script_ranges}
@@ -106,49 +107,30 @@ def detect_script(lyrics:str) -> str:
     
     return None
 
-# Transliterate ANY remaining romanized lyrics
-def transliterate_romanized(translated_lyrics:str):
-    previous_lyrics = ""
-    max_iterations = 10
-    iteration = 0
-
-    while translated_lyrics != previous_lyrics and iteration < max_iterations:
-        previous_lyrics = translated_lyrics
-        remaining_romanized = re.findall(r"[a-zA-Z'']+", translated_lyrics)
-        
-        if not remaining_romanized:
-            break
-
-        for word in remaining_romanized:
-            transliterated_word = transliterate(word, ITRANS, DEVANAGARI)
-            translated_lyrics = re.sub(rf'\b{re.escape(word)}\b', transliterated_word, translated_lyrics)
-
-        iteration += 1
-        
-    return translated_lyrics
 
 def translate(lyrics: str, artist: str) -> str:
-    # Clean lyrics first
-    lyrics = clean_lyrics(lyrics, artist)
-    
-    # Split lyrics into lines
-    lines = lyrics.split('\n')
+    # 1: Clean lyrics
+    cleaned_lyrics = clean_lyrics(lyrics, artist)
+    lines = re.split(r'\r\n|\r|\n', cleaned_lyrics)
+
+    # edge case for urdu/arabic
+    if detect_script(cleaned_lyrics) == "ar":
+        new_lines = []
+        for line in lines:
+            new_lines.extend(re.split(r'(?<=[.!؟۔])\s*', line))  # Split at Urdu/Arabic sentence-ending marks
+        lines = [line.strip() for line in new_lines if line.strip()]
+
     translated_lines = []
     
     for line in lines:
+        # skip empty
         if not line.strip():
             translated_lines.append(line)
             continue
-            
-        # Detect script of the line
+        
+        # 2: Translate each line if it's not predominantly Hindi
         script = detect_script(line)
-
-        # if script is hindi, then skip
-        if script == "hi":
-            translated_lines.append(line)
-
-        # if not, then do translation
-        else:
+        if script != "hi":
             try:
                 # Translate line with detected source language
                 response = client.translate_text(
@@ -163,8 +145,7 @@ def translate(lyrics: str, artist: str) -> str:
                 print(f"Translation error for script {script}: {e}")
                 translated_lines.append(line)
         
-
-        # Handle any romanized text into devanagari (ex: namaste -> नमस्ते)
+        # 3: Transliterate any romanized text in the line (ex: namaste -> नमस्ते)
         words = line.split()
         translated_words = []
         
@@ -180,10 +161,10 @@ def translate(lyrics: str, artist: str) -> str:
     # Join lines back together
     translated_lyrics = '\n'.join(translated_lines)
 
-    # Detect any remaining non-Hindi, non-Latin text for translation
+    # 4: Translate any remaining non-Hindi text in the joined text
     non_hindi_texts = re.findall(r'[^\u0900-\u097F\s\.,!?]+', translated_lyrics)
-    if non_hindi_texts:
-        for text in set(non_hindi_texts):  # Remove duplicates for efficiency
+    for text in set(non_hindi_texts):
+        if text.strip():
             try:
                 response = client.translate_text(
                     contents=[text],
@@ -192,20 +173,34 @@ def translate(lyrics: str, artist: str) -> str:
                     mime_type="text/plain"
                 )
                 translated_text = response.translations[0].translated_text
+                # Replace whole-word matches only
                 translated_lyrics = re.sub(rf'\b{re.escape(text)}\b', translated_text, translated_lyrics)
             except Exception as e:
                 print(f"Error translating non-Hindi text '{text}': {e}")
 
-    # Final pass for any remaining Latin script words
+    # 5: Final pass to transliterate any remaining romanized text
     translated_lyrics = translated_lyrics.replace("'", "")
-    
-    return transliterate_romanized(translated_lyrics)
+    previous_lyrics = ""
+    max_iterations = 10
+    iteration = 0
 
+    while translated_lyrics != previous_lyrics and iteration < max_iterations:
+        previous_lyrics = translated_lyrics
+        remaining_romanized = re.findall(r"[a-zA-Z'']+", translated_lyrics)
+        if not remaining_romanized:
+            break
+
+        for word in remaining_romanized:
+            transliterated_word = transliterate(word, ITRANS, DEVANAGARI)
+            translated_lyrics = re.sub(rf'\b{re.escape(word)}\b', transliterated_word, translated_lyrics)
+        iteration += 1
+        
+    return translated_lyrics
 
 specific_entry = df.iloc[227]
 lyrics = specific_entry['raw_lyrics']
 artist = specific_entry['artist']
-print(f"Original {specific_entry['title']}: {specific_entry}")
+print(f"Original {specific_entry['title']}: {lyrics}")
 print(f"Translated {specific_entry['title']}: {translate(lyrics, artist)}")
 
 # df['cleaned_lyrics'] = np.vectorize(translate)(df['raw_lyrics'], df['artist'])
