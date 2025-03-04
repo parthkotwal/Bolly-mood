@@ -19,129 +19,199 @@ client = translate_v3.TranslationServiceClient.from_service_account_file(GCP_CRE
 
 df = pd.read_csv('data/lyrics/lyrics.csv')
 df.columns = ['artist', 'title','raw_lyrics']
+df = df[df['artist'] != 'KK']
 
-def clean_lyrics(lyrics: str, artist: str):
+# Define the patterns to remove
+STATIC_CLEAN_PATTERNS = [re.compile(p, flags=re.IGNORECASE) for p in [
+    r'\b(embed|you might also like|related songs|other songs you might like|advertisement|promo)\b',  # Various unwanted phrases
+    r'\[.*?\]',  # Any text within square brackets
+    r'http[s]?://\S+',  # URLs
+    r'--+',  # Long dashes
+    r'^\s*$',  # Empty lines
+    r"^\d+\s*contributor.*?lyrics",  # Contributor section
+    r'embed',
+    r"\(|\)",
+    r"1",
+    r'you might also like',
+    r'\*',
+    r"\$'?[\d,]+'?",
+    r"(?<!\.)\.(?!\.)",
+    r'(?<!।)।(?!।)',
+    r'x2',
+    r'x3',
+    r'x4',
+    r'x5',
+    r'x6',
+    r'x7',
+    r'x8',
+    '\d+see\s+udit\s+narayan\s+liveget\s+tickets\s+as\s+low\s+as\s+\d+'
+]]
+
+# Dynamic patterns function
+def get_dynamic_patterns(artist: str):
+    artist_parts = artist.split()
+    artist_first_name = artist_parts[0].lower() if artist_parts else ""
+    artist_last_name = artist_parts[1].lower() if len(artist_parts) > 1 else ""
+
+    return [re.compile(p.format(first=artist_first_name, last=artist_last_name), flags=re.IGNORECASE) for p in [
+        r'see\s+{first}\s*{last}\s*liveget\s*tickets\s*as\s*low\s*as',
+        r'see\s+{first}\s*{last}\s*liveget\s*tickets\s*as\s*low\s*as\s*\d+\s*you\s*might\s*also\s*like',
+        r'see\s+{first}\s*liveget\s*tickets\s*as\s*low\s*as\s*\+\s*you\s*might\s*also\s*like',
+        r'see\s+{last}\s*liveget\s*tickets\s*as\s*low\s*as\s*\d+\s*you\s*might\s*also\s*like',
+        r'lyrics\s*source\s+{first}\s*{last}\s*liveget\s*tickets\s*as\s*low\s*as\s*\d+\s*you\s*might\s*also\s*like'
+    ]]
+
+# Remove unwanted patterns from Genius API
+def clean_lyrics(lyrics:str, artist:str) -> str:
     # Convert lyrics to lowercase for consistent matching
     lyrics = lyrics.lower()
     
-    # Split the artist name into first and last names
-    artist_parts = artist.split()
-    artist_first_name = artist_parts[0] if len(artist_parts) > 0 else ""
-    artist_last_name = artist_parts[1] if len(artist_parts) > 1 else ""
-    
-    # Define the patterns to remove
-    patterns = [
-        r'\b(embed|you might also like|related songs|other songs you might like|advertisement|promo)\b',  # Various unwanted phrases
-        r'\[.*?\]',  # Any text within square brackets
-        r'http[s]?://\S+',  # URLs
-        r'--+',  # Long dashes
-        r'^\s*$',  # Empty lines
-        r"^\d+\s*contributor.*?lyrics",  # Contributor section
-        r'embed',
-        r"\(|\)",
-        r"1",
-        r'you might also like',
-        r'\*',
-        r"\$'?[\d,]+'?",
-        r"(?<!\.)\.(?!\.)",
-        r'(?<!।)।(?!।)',
-        rf'see\s+{artist_first_name.lower()}\s*{artist_last_name.lower()}\s*liveget\s*tickets\s*as\s*low\s*as',
-        rf'see\s+{artist_first_name.lower()}\s*{artist_last_name.lower()}\s*liveget\s*tickets\s*as\s*low\s*as\s*\d+\s*you\s*might\s*also\s*like',
-        rf'see\s+{artist_first_name.lower()}\s*liveget\s*tickets\s*as\s*low\s*as\s*\+\s*you\s*might\s*also\s*like',
-        rf'see\s+{artist_last_name.lower()}\s*liveget\s*tickets\s*as\s*low\s*as\s*\d+\s*you\s*might\s*also\s*like',
-        rf'lyrics\s*source\s+{artist_first_name.lower()}\s*{artist_last_name.lower()}\s*liveget\s*tickets\s*as\s*low\s*as\s*\d+\s*you\s*might\s*also\s*like',
-        '\d+see\s+udit\s+narayan\s+liveget\s+tickets\s+as\s+low\s+as\s+\d+'
-    ]
-    
-    # Loop through each pattern and remove it from the lyrics
-    for pattern in patterns:
-        lyrics = re.sub(pattern, '', lyrics, flags=re.IGNORECASE)
-    
-    # Clean up extra spaces that might have been left behind
-    lyrics = re.sub(r'\s+', ' ', lyrics).strip()
+    # Apply static patterns
+    for regex in STATIC_CLEAN_PATTERNS:
+        lyrics = regex.sub('', lyrics)
 
-    return lyrics
+    # Apply dynamic patterns
+    dynamic_patterns = get_dynamic_patterns(artist)
+    for regex in dynamic_patterns:
+        lyrics = regex.sub('', lyrics)
 
-def translate(lyrics: str, artist: str):
-    language_scripts = {
-        "as": r"[\u0980-\u09FF]+(?: [\u0980-\u09FF]+)*",  # Assamese
-        "bn": r"[\u0980-\u09FF]+(?: [\u0980-\u09FF]+)*",  # Bengali
-        "gu": r"[\u0A80-\u0AFF]+(?: [\u0A80-\u0AFF]+)*",  # Gujarati
-        "hi": r"[\u0900-\u097F]+(?: [\u0900-\u097F]+)*",  # Hindi
-        "kn": r"[\u0C80-\u0CFF]+(?: [\u0C80-\u0CFF]+)*",  # Kannada
-        "ks": r"[\u0600-\u06FF]+(?: [\u0600-\u06FF]+)*",  # Kashmiri (Perso-Arabic script)
-        "ml": r"[\u0D00-\u0D7F]+(?: [\u0D00-\u0D7F]+)*",  # Malayalam
-        "mr": r"[\u0900-\u097F]+(?: [\u0900-\u097F]+)*",  # Marathi
-        "ne": r"[\u0900-\u097F]+(?: [\u0900-\u097F]+)*",  # Nepali
-        "or": r"[\u0B00-\u0B7F]+(?: [\u0B00-\u0B7F]+)*",  # Oriya (Odia)
-        "pa": r"[\u0A00-\u0A7F]+(?: [\u0A00-\u0A7F]+)*",  # Punjabi
-        "sa": r"[\u0900-\u097F]+(?: [\u0900-\u097F]+)*",  # Sanskrit (Devanagari script)
-        "sd": r"[\u0600-\u06FF]+(?: [\u0600-\u06FF]+)*",  # Sindhi (Arabic script)
-        "ta": r"[\u0B80-\u0BFF]+(?: [\u0B80-\u0BFF]+)*",  # Tamil
-        "te": r"[\u0C00-\u0C7F]+(?: [\u0C00-\u0C7F]+)*",  # Telugu
-        "ur": r"[\u0600-\u06FF]+(?: [\u0600-\u06FF]+)*",  # Urdu (Perso-Arabic script)
+    return re.sub(r'\s+', ' ', lyrics).strip()
+
+# Detect the script of the lyrics (ex: Devanagari, Gurmukhi etc.)
+def detect_script(lyrics:str) -> str:
+    script_ranges = {
+        "hi": (0x0900, 0x097F),  # Devanagari
+        "pa": (0x0A00, 0x0A7F),  # Gurmukhi
+        "bn": (0x0980, 0x09FF),  # Bengali
+        "gu": (0x0A80, 0x0AFF),  # Gujarati
+        "ta": (0x0B80, 0x0BFF),  # Tamil
+        "te": (0x0C00, 0x0C7F),  # Telugu
+        "kn": (0x0C80, 0x0CFF),  # Kannada
+        "ml": (0x0D00, 0x0D7F),  # Malayalam
+        "or": (0x0B00, 0x0B7F),  # Oriya
+        "en": (0x0020, 0x007E)   # English
     }
+    
+    char_counts = {script: 0 for script in script_ranges}
+    for char in lyrics:
+        code = ord(char)
+        for script, (start, end) in script_ranges.items():
+            if start <= code <= end:
+                char_counts[script] += 1
+                break
+    
+    # Return the script with the most characters, or None if no matches
+    if any(char_counts.values()):
+        return max(char_counts.items(), key=lambda x: x[1])[0]
+    
+    return None
 
-
-    # Remove all unnecessary characters and text from scraping
-    lyrics = clean_lyrics(lyrics, artist)
-
-    # Collect words from all detected languages
-    words_to_translate = set()
-    for lang, pattern in language_scripts.items():
-        words_to_translate.update(re.findall(pattern, lyrics))
-
-    # Include English and Romanized words
-    words_to_translate.update(re.findall(r"[a-zA-Z'’]+", lyrics))
-
-    # Convert set to list for batch API translation
-    words_to_translate = list(words_to_translate)
-
-    # Dictionary to store translations
-    translations = {}
-
-    if words_to_translate:
-        try:
-            response = client.translate_text(
-                contents=words_to_translate,
-                target_language_code="hi",
-                parent=PARENT,
-                mime_type="text/plain"
-            )
-            # Map original words to their translated versions
-            for original, translated in zip(words_to_translate, response.translations):
-                translations[original] = translated.translated_text
-        except Exception as e:
-            print(f"Translation error: {e}")
-
-    # Replace words in lyrics with Hindi translations
-    for word, translated in translations.items():
-        lyrics = re.sub(rf'\b{re.escape(word)}\b', translated, lyrics)
-
-    lyrics = lyrics.replace("'","")
-
-    # Transliterate remaining words until there are none
+# Transliterate ANY remaining romanized lyrics
+def transliterate_romanized(translated_lyrics:str):
     previous_lyrics = ""
     max_iterations = 10
     iteration = 0
 
-    while lyrics != previous_lyrics and iteration < max_iterations:
-        previous_lyrics = lyrics
-        remaining_romanized = re.findall(r"[a-zA-Z'’]+", lyrics)
+    while translated_lyrics != previous_lyrics and iteration < max_iterations:
+        previous_lyrics = translated_lyrics
+        remaining_romanized = re.findall(r"[a-zA-Z'']+", translated_lyrics)
+        
         if not remaining_romanized:
             break
 
         for word in remaining_romanized:
             transliterated_word = transliterate(word, ITRANS, DEVANAGARI)
-            lyrics = re.sub(rf'\b{re.escape(word)}\b', transliterated_word, lyrics)
+            translated_lyrics = re.sub(rf'\b{re.escape(word)}\b', transliterated_word, translated_lyrics)
 
         iteration += 1
+        
+    return translated_lyrics
 
-    return lyrics
+def translate(lyrics: str, artist: str) -> str:
+    # Clean lyrics first
+    lyrics = clean_lyrics(lyrics, artist)
+    
+    # Split lyrics into lines
+    lines = lyrics.split('\n')
+    translated_lines = []
+    
+    for line in lines:
+        if not line.strip():
+            translated_lines.append(line)
+            continue
+            
+        # Detect script of the line
+        script = detect_script(line)
 
-specific_entry = df.iloc[223]
+        # if script is hindi, then skip
+        if script == "hi":
+            translated_lines.append(line)
+
+        # if not, then do translation
+        else:
+            try:
+                # Translate line with detected source language
+                response = client.translate_text(
+                    contents=[line],
+                    target_language_code="hi",
+                    source_language_code=script,
+                    parent=PARENT,
+                    mime_type="text/plain"
+                )
+                translated_lines.append(response.translations[0].translated_text)
+            except Exception as e:
+                print(f"Translation error for script {script}: {e}")
+                translated_lines.append(line)
+        
+
+        # Handle any romanized text into devanagari (ex: namaste -> नमस्ते)
+        words = line.split()
+        translated_words = []
+        
+        for word in words:
+            if re.match(r'^[a-zA-Z'']+$', word):
+                transliterated = transliterate(word, ITRANS, DEVANAGARI)
+                translated_words.append(transliterated)
+            else:
+                translated_words.append(word)
+        
+        translated_lines.append(' '.join(translated_words))
+    
+    # Join lines back together
+    translated_lyrics = '\n'.join(translated_lines)
+
+    # Detect any remaining non-Hindi, non-Latin text for translation
+    non_hindi_texts = re.findall(r'[^\u0900-\u097F\s\.,!?]+', translated_lyrics)
+    if non_hindi_texts:
+        for text in set(non_hindi_texts):  # Remove duplicates for efficiency
+            try:
+                response = client.translate_text(
+                    contents=[text],
+                    target_language_code="hi",
+                    parent=PARENT,
+                    mime_type="text/plain"
+                )
+                translated_text = response.translations[0].translated_text
+                translated_lyrics = re.sub(rf'\b{re.escape(text)}\b', translated_text, translated_lyrics)
+            except Exception as e:
+                print(f"Error translating non-Hindi text '{text}': {e}")
+
+    # Final pass for any remaining Latin script words
+    translated_lyrics = translated_lyrics.replace("'", "")
+    
+    return transliterate_romanized(translated_lyrics)
+
+
+specific_entry = df.iloc[227]
 lyrics = specific_entry['raw_lyrics']
 artist = specific_entry['artist']
-
 print(f"Original {specific_entry['title']}: {specific_entry}")
-print(f"Translated {specific_entry['title']}: {clean_lyrics(lyrics, artist)}")
+print(f"Translated {specific_entry['title']}: {translate(lyrics, artist)}")
+
+# df['cleaned_lyrics'] = np.vectorize(translate)(df['raw_lyrics'], df['artist'])
+
+# df.drop('raw_lyrics', axis=1, inplace=True)
+# df.to_csv("data/lyrics/lyrics_cleaned.csv",index=False)
+# # df.to_clipboard()
+# print(df.head())
+# print("Dataset cleaned")
