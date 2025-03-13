@@ -22,7 +22,6 @@ def validate_preprocessing(df):
             r'you might also like',
             r'\*',
             r"\$'?[\d,]+'?",
-            r"(?<!\.)\.(?!\.)",
             r'x2',
             r'x3',
             r'x4',
@@ -63,4 +62,4 @@ if issues:
 else:
     print("All lyrics are completely preprocessed!")
 
-df.to_clipboard()
+# df.to_clipboard()

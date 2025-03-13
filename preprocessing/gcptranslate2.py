@@ -181,21 +181,20 @@ def translate(lyrics: str, artist: str) -> str:
 df = pd.read_csv('data/lyrics/lyrics.csv')
 df.columns = ['artist', 'title','raw_lyrics']
 
-specific_entry = df.loc[df['title'] == "Dhak Dhak"].iloc[0]
 # specific_entry = df.iloc[35]
-lyrics = specific_entry['raw_lyrics']
-artist = specific_entry['artist']
-print(f"Original {specific_entry['title']}: {lyrics}")
-print(f"Translated {specific_entry['title']}: {translate(lyrics, artist)}")
+# lyrics = specific_entry['raw_lyrics']
+# artist = specific_entry['artist']
+# print(f"Original {specific_entry['title']}: {lyrics}")
+# print(f"Translated {specific_entry['title']}: {translate(lyrics, artist)}")
 
-# df = pd.read_csv('data/lyrics/lyrics.csv')
-# df.columns = ['artist', 'title','raw_lyrics']
-# df = df[df['artist'] != 'KK']
-# df = df[~df['raw_lyrics'].apply(is_instrumental)]
-# df['cleaned_lyrics'] = np.vectorize(translate)(df['raw_lyrics'], df['artist'])
+df = pd.read_csv('data/lyrics/lyrics.csv')
+df.columns = ['artist', 'title','raw_lyrics']
+df = df[df['artist'] != 'KK'] 
+df = df[~df['raw_lyrics'].apply(is_instrumental)]
+df['cleaned_lyrics'] = np.vectorize(translate)(df['raw_lyrics'], df['artist'])
 
-# df.drop('raw_lyrics', axis=1, inplace=True)
-# df.to_csv("data/lyrics/lyrics_cleaned.csv",index=False)
-# # df.to_clipboard()
-# print(df.head())
-# print("Dataset cleaned")
+df.drop('raw_lyrics', axis=1, inplace=True)
+df.to_csv("data/lyrics/lyrics_cleaned.csv",index=False)
+# df.to_clipboard()
+print(df.head())
+print("Dataset cleaned")
