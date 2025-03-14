@@ -5,6 +5,7 @@ from pathlib import Path
 from indic_transliteration.sanscript import transliterate, DEVANAGARI, ITRANS
 import pandas as pd
 import numpy as np
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import re
 import os
 
@@ -145,8 +146,12 @@ def translate(lyrics: str, artist: str) -> str:
         
         for word in words:
             if re.match(r'^[a-zA-Z'']+$', word):
-                transliterated = transliterate(word, ITRANS, DEVANAGARI)
-                translated_words.append(transliterated)
+                try:
+                    transliterated = transliterate(word, ITRANS, DEVANAGARI)
+                    translated_words.append(transliterated)
+                except Exception as e:
+                    print(f"Error transliterating '{word}': {e}")
+                    translated_words.append(word)  # Retain the word for manual inspection
             else:
                 translated_words.append(word)
         
@@ -173,25 +178,49 @@ def translate(lyrics: str, artist: str) -> str:
                 print(f"Error translating non-Hindi text '{text}': {e}")
 
     # 5: Final check to transliterate any remaining romanized text
-    translated_lyrics = translated_lyrics.replace("'", "")
-    translated_lyrics = re.sub( r"\b[a-zA-Z']+\b", lambda m: transliterate(m.group(), ITRANS, DEVANAGARI), translated_lyrics)
-        
+    translated_lyrics = re.sub(
+        # Match any sequence of Roman letters/apostrophes, even if embedded in Devanagari
+        r'[a-zA-Z\']+',  
+        lambda m: transliterate(m.group(), ITRANS, DEVANAGARI),
+        translated_lyrics,
+        flags=re.IGNORECASE
+    )
+
+    # Remove apostrophes and newlines AFTER transliteration
+    translated_lyrics = translated_lyrics.replace("'", "").replace("\n", "")        
     return translated_lyrics
+
+def process_row(row):
+    artist = row['artist']
+    lyrics = row['raw_lyrics']
+    return translate(lyrics, artist)
+
+def process_dataset(df:pd.DataFrame):
+    cleaned = []
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = [executor.submit(process_row, row) for _, row in df.iterrows()]
+        cleaned = [future.result() for future in futures]
+
+    df['cleaned_lyrics'] = cleaned
+    return df
 
 df = pd.read_csv('data/lyrics/lyrics.csv')
 df.columns = ['artist', 'title','raw_lyrics']
 
-# specific_entry = df.iloc[35]
+# specific_entry = df.iloc[19]
 # lyrics = specific_entry['raw_lyrics']
 # artist = specific_entry['artist']
 # print(f"Original {specific_entry['title']}: {lyrics}")
 # print(f"Translated {specific_entry['title']}: {translate(lyrics, artist)}")
 
-df = pd.read_csv('data/lyrics/lyrics.csv')
-df.columns = ['artist', 'title','raw_lyrics']
 df = df[df['artist'] != 'KK'] 
+df = df[df['title'] != "L-o-v-e-V-a-S-h-I-k-A-r-A-n-A-s-P-e-C-i-A-l-I-s-T-m-O-l-v-I-j-I-+91-96-02-59-67-52-ASTRO.....BlAcK mAgIc sPeCialist MoLvI jI"]
 df = df[~df['raw_lyrics'].apply(is_instrumental)]
-df['cleaned_lyrics'] = np.vectorize(translate)(df['raw_lyrics'], df['artist'])
+df = process_dataset(df)
+
+stop_words = set(stopwords.words('hinglish'))
+transliterated_stop_words = {transliterate(x, ITRANS, DEVANAGARI) for x in stop_words}
+df['cleaned_lyrics'] = df['cleaned_lyrics'].apply(lambda x: ' '.join([word for word in x.split() if word not in transliterated_stop_words]))
 
 df.drop('raw_lyrics', axis=1, inplace=True)
 df.to_csv("data/lyrics/lyrics_cleaned.csv",index=False)
