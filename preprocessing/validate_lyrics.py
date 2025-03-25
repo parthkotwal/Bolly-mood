@@ -62,4 +62,4 @@ if issues:
 else:
     print("All lyrics are completely preprocessed!")
 
-# df.to_clipboard()
+df.to_clipboard()
