@@ -93,8 +93,9 @@ spotify_data = pd.read_csv("data/metadata/spotify_metadata.csv")
 
 missing_songs = lyrics_data[~lyrics_data['title'].isin(spotify_data['title'])]
 retrieved_metadata = missing_songs.apply(lambda row: search_song(row['title'], row['artist']), axis=1)
+retrieved_metadata = retrieved_metadata.dropna().apply(pd.Series)
 
-spotify_data = pd.concat([spotify_data, retrieved_metadata.dropna()], ignore_index=True)
+spotify_data = pd.concat([spotify_data, retrieved_metadata], ignore_index=True)
 
 print(f"After re-matching, total matched songs: {len(retrieved_metadata)}")
 print(retrieved_metadata)
