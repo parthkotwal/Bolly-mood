@@ -96,10 +96,11 @@ retrieved_metadata = missing_songs.apply(lambda row: search_song(row['title'], r
 
 spotify_data = pd.concat([spotify_data, retrieved_metadata.dropna()], ignore_index=True)
 
-print(f"After re-matching, total matched songs: {len(spotify_data)}")
-print(missing_songs)
+print(f"After re-matching, total matched songs: {len(retrieved_metadata)}")
+print(retrieved_metadata)
 
 spotify_data.to_csv("data/metadata/spotify_metadata.csv", index=False)
+missing_songs.to_csv("data/metadata/missing_songs.csv", index=False)
 
 # missing_songs.to_csv("data/metadata/missing_songs.csv", index=False)
 print("Metadata extraction completed successfully!")
