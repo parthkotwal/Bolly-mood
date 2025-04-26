@@ -19,8 +19,11 @@ sp = spotipy.Spotify(client_credentials_manager=client_manager, requests_timeout
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=1, max=8))
 def search_song(genius_title:str, genius_artist:str):
     try:
-        query = f"track:{genius_title} artist:{genius_artist}"
+        query = f"title:{genius_title} artist:{genius_artist}"
         results = sp.search(q=query, type="track", limit=5)
+        if not results['tracks']['items']:
+            query = f"{genius_title} {genius_artist}"
+            results = sp.search(q=query, type="track", limit=5)
 
         for track in results['tracks']['items']:
             spotify_title = track["name"]
@@ -78,30 +81,47 @@ def match_titles(genius_title:str, spotify_title:str, threshold=70):
 
 def match_artist(genius_artist:str, spotify_artists:List[str]):
     genius_artist = genius_artist.lower()
-    spotify_artists = [a.lower() for a in spotify_artists]
 
     for artist in spotify_artists:
-        if genius_artist in artist or artist in genius_artist:
+        similarity = fuzz.partial_ratio(genius_artist, artist.lower())
+        if similarity >= 80:
             return True
         
     return False
 
-lyrics_data = pd.read_csv("data/lyrics/lyrics_cleaned_labelled_gcp.csv")
-# spotify_data = lyrics_data.apply(lambda row: search_song(row['title'], row['artist']), axis=1)
-# spotify_data = spotify_data.dropna().apply(pd.Series)
-spotify_data = pd.read_csv("data/metadata/spotify_metadata.csv")
+# lyrics_data = pd.read_csv("data/lyrics/lyrics_cleaned_labelled_gcp.csv")
+# # spotify_data = lyrics_data.apply(lambda row: search_song(row['title'], row['artist']), axis=1)
+# # spotify_data = spotify_data.dropna().apply(pd.Series)
+# spotify_data = pd.read_csv("data/metadata/spotify_metadata.csv")
 
-missing_songs = lyrics_data[~lyrics_data['title'].isin(spotify_data['title'])]
+# missing_songs = lyrics_data[~lyrics_data['title'].isin(spotify_data['title'])]
+# retrieved_metadata = missing_songs.apply(lambda row: search_song(row['title'], row['artist']), axis=1)
+# retrieved_metadata = retrieved_metadata.dropna().apply(pd.Series)
+
+# spotify_data = pd.concat([spotify_data, retrieved_metadata], ignore_index=True)
+
+# print(f"After re-matching, total matched songs: {len(retrieved_metadata)}")
+# print(retrieved_metadata)
+
+# spotify_data.to_csv("data/metadata/spotify_metadata.csv", index=False)
+# missing_songs.to_csv("data/metadata/missing_songs.csv", index=False)
+
+# # missing_songs.to_csv("data/metadata/missing_songs.csv", index=False)
+# print("Metadata extraction completed successfully!")
+
+spotify_data = pd.read_csv("data/metadata/spotify_metadata.csv")
+missing_songs = pd.read_csv("data/metadata/missing_songs.csv")
+
 retrieved_metadata = missing_songs.apply(lambda row: search_song(row['title'], row['artist']), axis=1)
 retrieved_metadata = retrieved_metadata.dropna().apply(pd.Series)
 
 spotify_data = pd.concat([spotify_data, retrieved_metadata], ignore_index=True)
 
-print(f"After re-matching, total matched songs: {len(retrieved_metadata)}")
-print(retrieved_metadata)
+matched_titles_artists = set(zip(retrieved_metadata['title'], retrieved_metadata['artist']))
+missing_songs = missing_songs[~missing_songs.apply(lambda row: (row['title'], row['artist']) in matched_titles_artists, axis=1)]
 
 spotify_data.to_csv("data/metadata/spotify_metadata.csv", index=False)
 missing_songs.to_csv("data/metadata/missing_songs.csv", index=False)
 
-# missing_songs.to_csv("data/metadata/missing_songs.csv", index=False)
-print("Metadata extraction completed successfully!")
+print(f"After re-matching, total matched songs: {len(retrieved_metadata)}")
+print(f"Remaining missing songs: {len(missing_songs)}")

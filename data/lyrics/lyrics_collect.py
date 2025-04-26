@@ -17,7 +17,7 @@ genius.remove_section_headers = True
 genius.excluded_terms = ["(Live)", "(Remix)"]
 
 # Load artist names and existing dataset
-artists = list(pd.read_csv("data/artistnames.csv")['Name'])
+artists = list(pd.read_csv("data/lyrics/artistnames.csv")['Name'])
 # artists = ['Rahat Fateh Ali Khan']
 existing_data_file = "data/lyrics.csv"
 try:
